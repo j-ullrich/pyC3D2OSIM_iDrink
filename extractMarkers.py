@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 
 # Command-line interface definition
 parser = argparse.ArgumentParser(description='Extract marker locations from C3D files and save in TRC format.')
-parser.add_argument('input_file', metavar='I', type=argparse.FileType('rb'),
+parser.add_argument('--input_file', metavar='I', type=argparse.FileType('rb'), default=None,
                     help='C3D file to use')
 parser.add_argument('--output_file', metavar='O', type=argparse.FileType('w'), default=sys.stdout,
                     help='TRC file to write')
@@ -34,6 +34,12 @@ parser.add_argument('--mocap_transform', metavar='T', type=str, nargs='+', defau
                          'system optionally trailed by axes order for swapping eg. yxz 90 180 0.')
 parser.add_argument('--resample', metavar='S', type=int, default=0,
                     help='Resample data using second order spline to desired rate in Hz.')
+parser.add_argument('--c3d_folder', metavar='F', type=str, default=None,
+                    help='Folder containing C3D files to process')
+parser.add_argument('--root_folder', metavar='RF', type=str, default=None,
+                    help='Folder containing Subfolders with C3D files to process')
+parser.add_argument('--DEBUG', action='store_true', default=False,
+                    help='Debug mode')
 
 # Loads marker position from .osim file
 def loadOSIM(file):
@@ -226,43 +232,216 @@ def writeTRC(data, file):
             file.write("\t%f\t%f\t%f" % tuple(data["Data"][l][i]))
         file.write("\n")
 
+def process_c3d_folder(c3d_folder):
+    """
+    Iterate through all c3d files in c3d_folder and process them.
+
+    Input: c3d_folder - string
+    """
+    import os
+    for subdir, dirs, files in os.walk(c3d_folder):
+        for file in files:
+            if file.endswith('.c3d'):
+                c3d_file = os.path.join(subdir, file)
+                trc_file = c3d_file.replace('.c3d', '.trc')
+                with open(c3d_file, 'rb') as c3d_file, open(trc_file, 'w') as trc_file:
+                    data = loadC3D(c3d_file)
+                    writeTRC(data, trc_file)
+
+def process_root_folder(root_folder, DEBUG = False):
+    """
+    Iterate thorugh all subfolders in root folder.
+    Process all c3d Files in each subfolder.
+
+    Input: root_folder - string
+    """
+    import os
+
+    labellist1 = ["shoulder_R",
+                  "shoulder_L",
+                  "elbow_R",
+                  "arm_R",
+                  "arm_L",
+                  "middlefinger_L",
+                  "head",
+                  "hand_L",
+                  "wrist_inner_R",
+                  "wrist_inner_L",
+                  "hand_R",
+                  "elbow_L",
+                  "middlefinger_R",
+                  "indexfinger_R",
+                  "wrist_outer_L",
+                  "chest",
+                  "indexfinger_L",
+                  "wrist_outer_R",
+                  "hip_R",
+                  "thumb_L",
+                  "hip_L",
+                  "thumb_R"
+                  ]
+
+    #This list is used for P01
+    labellist2 = ["Rshoulder",
+                  "Lshoulder",
+                  "Relbow",
+                  "Rarm",
+                  "Larm",
+                  "Lmiddlefinger",
+                  "head",
+                  "Lhand",
+                  "Rwrist_inner",
+                  "Lwrist_inner",
+                  "Rhand",
+                  "Lelbow",
+                  "Rmiddlefinger",
+                  "Rindexfinger",
+                  "Lwrist",
+                  "chest",
+                  "Lindexfinger",
+                  "Rwrist",
+                  "hip_R",
+                  "Lthumb",
+                  "hip_L",
+                  "Rthumb"]
+    used_labels = None
+
+
+    for subdir, dirs, files in os.walk(root_folder):
+        for file in files:
+            if file.endswith('.c3d'):
+                c3d_file = os.path.join(subdir, file)
+                trc_file = c3d_file.replace('.c3d', '.trc')
+                with open(c3d_file, 'rb') as c3d_file, open(trc_file, 'w') as trc_file:
+                    data = loadC3D(c3d_file)
+
+                    # Check used nomenclature in data["labels"]
+                    if "body_shoulder_R" in data["Labels"]:
+                        used_labels = "labellist1"
+                    else:
+                        used_labels = "labellist2"
+
+
+                    if DEBUG:
+                        # Take all Data of clusters out. and rename the remaining labels
+                        # Take all Data of clusters out. and rename the remaining labels
+                        for i in range(len(data["Labels"]) - 1, -1, -1):
+                            """
+                            if the label contains "cluster" then remove it from the labels and the corresponding data 
+                            from data["Data"].
+
+                            If the label contains "body_" take "body_" out of the labelname. e.g. "body_head" -> "head"
+                            """
+                            try:
+                                if "body_" in data["Labels"][i]:
+                                    if used_labels == "labellist1":
+                                        data["Labels"][i] = data["Labels"][i].replace("body_", "")
+                                    else:
+                                        label = data["Labels"][i].replace("body_", "")
+                                        data["Labels"][i] = labellist1[labellist2.index(label)]
+                                if "cluster" in data["Labels"][i]:
+                                    data["Labels"].remove(data["Labels"][i])
+                                    data["Data"] = np.delete(data["Data"], i, 0)
+                            except Exception as e:
+                                print("Error: ", e)
+                                print("Current i: ", i)
+                                print("Data_labels: ", data["Labels"])
+                                print("Data_len_labels: ", len(data["Labels"]))
+                                print("Data_shape: ", data["Data"].shape)
+                                print("Data_keys: ", data.keys())
+                                sys.exit(0)
+
+                        data["NumMarkers"] = len(data["Labels"])
+
+                        writeTRC(data, trc_file)
+                        print("Processed: ", trc_file.name)
+
+                        sys.exit(0)
+
+                    # Take all Data of clusters out. and rename the remaining labels
+                    for i in range(len(data["Labels"]) - 1, -1, -1):
+                        """
+                        if the label contains "cluster" then remove it from the labels and the corresponding data 
+                        from data["Data"].
+
+                        If the label contains "body_" take "body_" out of the labelname. e.g. "body_head" -> "head"
+                        """
+                        try:
+                            if "body_" in data["Labels"][i]:
+                                if used_labels == labellist1:
+                                    data["Labels"][i] = data["Labels"][i].replace("body_", "")
+                                else:
+                                    label = data["Labels"][i].replace("body_", "")
+                                    data["Labels"][i] = labellist1[labellist2.index(label)]
+                            if "cluster" in data["Labels"][i]:
+                                data["Labels"].remove(data["Labels"][i])
+                                data["Data"] = np.delete(data["Data"], i, 0)
+                        except Exception as e:
+                            print("Error: ", e)
+                            print("Current i: ", i)
+                            print("Data_labels: ", data["Labels"])
+                            print("Data_len_labels: ", len(data["Labels"]))
+                            print("Data_shape: ", data["Data"].shape)
+                            print("Data_keys: ", data.keys())
+                            sys.exit(0)
+
+                    data["NumMarkers"] = len(data["Labels"])
+
+                    writeTRC(data, trc_file)
+                    print("Processed: ", trc_file.name)
+
 
 if __name__ == '__main__':
     # Parse command line arguments
     args = parser.parse_args()
 
+    #args.DEBUG = True
+    # Debug mode
+    if args.DEBUG:
+        root_folder = r"C:\iDrink\Data\P01"
+        process_root_folder(root_folder, DEBUG=True)
+
+    # Process c3d_folder
+    if args.c3d_folder is not None:
+        process_c3d_folder(args.c3d_folder)
+
+    # Process root_folder
+    if args.root_folder is not None:
+        process_root_folder(args.root_folder)
+
     # Load input file
-    if args.input_file.name[-4:] == '.trc':
-        data = loadTRC(args.input_file)
-    else:
-        data = loadC3D(args.input_file)
+    if args.input_file is not None:
+        if args.input_file.name[-4:] == '.trc':
+            data = loadTRC(args.input_file)
+        else:
+            data = loadC3D(args.input_file)
 
-    modelMarkers = None
-    if args.osim_model is not None:
-        modelMarkers = loadOSIM(args.osim_model)
+        modelMarkers = None
+        if args.osim_model is not None:
+            modelMarkers = loadOSIM(args.osim_model)
 
-    # Resample data
-    if args.resample > 0:
-        resample(data, args.resample)
+        # Resample data
+        if args.resample > 0:
+            resample(data, args.resample)
 
-    # Translate markers relative to origin marker
-    if args.origin_marker is not None:
-        translateToOrigin(data, args.origin_marker)
+        # Translate markers relative to origin marker
+        if args.origin_marker is not None:
+            translateToOrigin(data, args.origin_marker)
 
-    # Delete unnecessary markers and rename them
-    if args.markers is not None:
-        filterMarkers(data, args.markers[0])
+        # Delete unnecessary markers and rename them
+        if args.markers is not None:
+            filterMarkers(data, args.markers[0])
 
-    # MoCap transformation
-    if len(args.mocap_transform) > 0:
-        mocapTransform(data, args.mocap_transform)
+        # MoCap transformation
+        if len(args.mocap_transform) > 0:
+            mocapTransform(data, args.mocap_transform)
 
-    if len(args.axes_markers) > 0:
-        rotateAroundAxes(data, args.axes_markers, modelMarkers)
+        if len(args.axes_markers) > 0:
+            rotateAroundAxes(data, args.axes_markers, modelMarkers)
 
-    # Write the data into the TRC file
-    writeTRC(data, args.output_file)
+        # Write the data into the TRC file
+        writeTRC(data, args.output_file)
 
-    # Clean up
-    args.input_file.close()
-    args.output_file.close()
+        # Clean up
+        args.input_file.close()
+        args.output_file.close()
