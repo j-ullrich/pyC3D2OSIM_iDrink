@@ -41,6 +41,9 @@ by the rotation around each axes in degrees:
 
 `--mocap_transform yxz 90 180 0`
 
+For batch processing you can use the path to the folder as string as input. It iterates thorugh all subfolders and c3d Files:
+'--root_folder=[pathtofolder]'
+
 You can also use this library as an imported module in your scripts.
 
 # Issues
