@@ -232,21 +232,37 @@ def writeTRC(data, file):
             file.write("\t%f\t%f\t%f" % tuple(data["Data"][l][i]))
         file.write("\n")
 
-def process_c3d_folder(c3d_folder):
+def process_c3d_folder(c3d_folder, mocap_transform):
     """
     Iterate through all c3d files in c3d_folder and process them.
+    Allows Mocap Transformation. fo each file
 
-    Input: c3d_folder - string
+    Input:
+     - c3d_folder - string
+     - mocap_transform - list of strings
     """
     import os
-    for subdir, dirs, files in os.walk(c3d_folder):
+
+    for subdir, dirs, files in os.walk(root_folder):
         for file in files:
             if file.endswith('.c3d'):
                 c3d_file = os.path.join(subdir, file)
+
                 trc_file = c3d_file.replace('.c3d', '.trc')
+                trc_folder = os.path.join(os.path.split(os.path.split(trc_file)[0])[0], 'trc')
+                if not os.path.exists(trc_folder):
+                    os.makedirs(trc_folder)
+                trc_file = os.path.join(trc_folder, os.path.split(trc_file)[1])
+
                 with open(c3d_file, 'rb') as c3d_file, open(trc_file, 'w') as trc_file:
                     data = loadC3D(c3d_file)
+
+                    # MoCap transformation
+                    if len(mocap_transform) > 0:
+                        mocapTransform(data, mocap_transform)
+
                     writeTRC(data, trc_file)
+                    print("Processed: ", trc_file.name)
 
 def process_root_folder(root_folder, DEBUG = False):
     """
@@ -311,7 +327,13 @@ def process_root_folder(root_folder, DEBUG = False):
         for file in files:
             if file.endswith('.c3d'):
                 c3d_file = os.path.join(subdir, file)
+
                 trc_file = c3d_file.replace('.c3d', '.trc')
+                trc_folder = os.path.join(os.path.split(os.path.split(trc_file)[0])[0], 'trc')
+                if not os.path.exists(trc_folder):
+                    os.makedirs(trc_folder)
+
+                trc_file = os.path.join(trc_folder, os.path.split(trc_file)[1])
                 with open(c3d_file, 'rb') as c3d_file, open(trc_file, 'w') as trc_file:
                     data = loadC3D(c3d_file)
 
@@ -387,6 +409,8 @@ def process_root_folder(root_folder, DEBUG = False):
 
                     data["NumMarkers"] = len(data["Labels"])
 
+                    mocapTransform(data, ["qualisys"])
+
                     writeTRC(data, trc_file)
                     print("Processed: ", trc_file.name)
 
@@ -401,13 +425,14 @@ if __name__ == '__main__':
         root_folder = r"C:\iDrink\Data\P01"
         process_root_folder(root_folder, DEBUG=True)
 
-    # Process c3d_folder
-    if args.c3d_folder is not None:
-        process_c3d_folder(args.c3d_folder)
-
     # Process root_folder
+    # command example: python extractMarkers.py --root_folder C:\iDrink\Data
     if args.root_folder is not None:
         process_root_folder(args.root_folder)
+
+    # process c3d_folder
+    if args.c3d_folder is not None:
+        process_c3d_folder(args.c3d_folder, args.mocap_transform)
 
     # Load input file
     if args.input_file is not None:
