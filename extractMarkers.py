@@ -35,7 +35,7 @@ parser.add_argument('--mocap_transform', metavar='T', type=str, nargs='+', defau
 parser.add_argument('--resample', metavar='S', type=int, default=0,
                     help='Resample data using second order spline to desired rate in Hz.')
 parser.add_argument('--c3d_folder', metavar='F', type=str, default=None,
-                    help='Folder containing C3D files to process')
+                    help='Folder containing C3D files to process - supports Mocap Transformation by adding the "--mocap_transform" argument')
 parser.add_argument('--root_folder', metavar='RF', type=str, default=None,
                     help='Folder containing Subfolders with C3D files to process')
 parser.add_argument('--DEBUG', action='store_true', default=False,
